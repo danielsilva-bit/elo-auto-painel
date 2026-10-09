@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elo Auto — Painel</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f6f6f4;
+    --surface: #fcfcfb;
+    --text: #0b0b0b;
+    --text2: #52514e;
+    --muted: #6f6e69;
+    --line: #e2e1dc;
+    --grid: #ecebe7;
+    --s1: #2a78d6;   /* enviados */
+    --s2: #eb6834;   /* anúncio fora do ar */
+    --warn-bg: #fff4e0;
+    --warn-text: #7a4a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #121211;
+      --surface: #1a1a19;
+      --text: #f0efec;
+      --text2: #c3c2b7;
+      --muted: #9a998f;
+      --line: #2c2c2a;
+      --grid: #262624;
+      --s1: #3987e5;
+      --s2: #d95926;
+      --warn-bg: #2b2208;
+      --warn-text: #f0c978;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .aviso { background: var(--warn-bg); color: var(--warn-text); border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; display: none; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .tile .n { font-size: 30px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .tile .l { color: var(--text2); font-size: 13px; margin-top: 4px; }
+  .tile .d { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .card .hint { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text2); margin-bottom: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  #chart { position: relative; width: 100%; }
+  #chart svg { display: block; width: 100%; height: auto; }
+  .axis text { fill: var(--muted); font-size: 11px; }
+  .tip {
+    position: absolute; pointer-events: none; background: var(--surface); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.14); display: none; white-space: nowrap; z-index: 2;
+  }
+  .tip b { display: block; margin-bottom: 4px; }
+  .tip .r { display: flex; justify-content: space-between; gap: 16px; font-variant-numeric: tabular-nums; }
+  .tip .r i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+  details { margin-top: 12px; font-size: 13px; }
+  summary { cursor: pointer; color: var(--text2); }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  footer { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Elo Auto · Painel</h1>
+    <span class="sub" id="atualizado">Carregando…</span>
+  </header>
+
+  <div class="aviso" id="aviso"></div>
+
+  <section class="tiles" id="tiles" aria-label="Resumo de hoje"></section>
+
+  <section class="card">
+    <h2>Envios por dia</h2>
+    <div class="hint">Últimos 14 dias · cada coluna é um dia</div>
+    <div class="legend">
+      <span><i style="background:var(--s1)"></i>Enviados à loja</span>
+      <span><i style="background:var(--s2)"></i>Anúncio fora do ar</span>
+    </div>
+    <div id="chart"><div class="tip" id="tip"></div></div>
+    <details>
+      <summary>Ver como tabela</summary>
+      <table id="tabela"></table>
+    </details>
+  </section>
+
+  <footer>
+    Só números agregados: nenhum dado de cliente é exibido nesta página.
+    Os números vêm do Elo Auto (planilha "Clientes APP - C6 Bank").
+  </footer>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// CONFIGURAÇÃO — depois que o endpoint do Apps Script existir, cole a URL /exec aqui.
+// ---------------------------------------------------------------------------
+const API_URL = '';
+
+// Formato esperado do endpoint (?action=painelResumo):
+// { ok: true, atualizado_em: '2026-10-09T20:30:00Z',
+//   hoje: { data:'2026-10-09', leads:31, matches:137, lojas_distintas:132, enviados:84, erros:41, pendentes:12 },
+//   dias: [ { data:'2026-10-09', leads:31, matches:137, enviados:84, erros:41 }, ... ] }
+
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => Number(n || 0).toLocaleString('pt-BR');
+const dm = (iso) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+
+function dadosExemplo() {
+  const dias = [];
+  const base = new Date('2026-10-09T12:00:00Z');
+  const enviados = [0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(base.getTime() - i * 86400000).toISOString().slice(0, 10);
+    const k = 13 - i;
+    const leads = k < 7 ? 18 + ((k * 7) % 11) : 22 + ((k * 5) % 14);
+    const env = k < 12 ? Math.round(leads * 2.6) : Math.round(leads * 2.7);
+    const err = Math.round(env * (0.35 + ((k * 3) % 5) / 40));
+    dias.push({ data: d, leads: leads, matches: Math.round(leads * 4.5), enviados: env, erros: err });
+  }
+  const h = dias[dias.length - 1];
+  return {
+    ok: true, atualizado_em: new Date().toISOString(),
+    hoje: { data: h.data, leads: h.leads, matches: h.matches, lojas_distintas: Math.round(h.matches * 0.95),
+            enviados: h.enviados, erros: h.erros, pendentes: 0 },
+    dias: dias, exemplo: true
+  };
+}
+
+async function carregar() {
+  const demo = new URLSearchParams(location.search).has('demo');
+  if (demo) return dadosExemplo();
+  if (!API_URL) return { ok: false, vazio: true };
+  const r = await fetch(API_URL + '?action=painelResumo', { cache: 'no-store' });
+  return await r.json();
+}
+
+function tiles(h) {
+  const total = (h.enviados || 0) + (h.erros || 0);
+  const taxa = total ? Math.round((h.erros / total) * 100) : 0;
+  const itens = [
+    [h.leads, 'Leads do dia', ''],
+    [h.matches, 'Matches gerados', ''],
+    [h.lojas_distintas, 'Lojas atingidas', 'lojas diferentes com match'],
+    [h.enviados, 'Enviados à loja', ''],
+    [h.erros, 'Anúncio fora do ar', total ? taxa + '% das tentativas' : ''],
+    [h.pendentes, 'Na fila', 'ainda sem tentativa']
+  ];
+  $('tiles').innerHTML = itens.map(function (t) {
+    return '<div class="tile"><div class="n">' + fmt(t[0]) + '</div><div class="l">' + t[1] + '</div>' +
+      (t[2] ? '<div class="d">' + t[2] + '</div>' : '') + '</div>';
+  }).join('');
+}
+
+function tabela(dias) {
+  const linhas = dias.slice().reverse().map(function (d) {
+    return '<tr><td>' + dm(d.data) + '</td><td>' + fmt(d.leads) + '</td><td>' + fmt(d.matches) +
+      '</td><td>' + fmt(d.enviados) + '</td><td>' + fmt(d.erros) + '</td></tr>';
+  }).join('');
+  $('tabela').innerHTML = '<thead><tr><th>Dia</th><th>Leads</th><th>Matches</th><th>Enviados</th><th>Fora do ar</th></tr></thead><tbody>' + linhas + '</tbody>';
+}
+
+function grafico(dias) {
+  const box = $('chart');
+  const tip = $('tip');
+  const W = Math.max(box.clientWidth, 300), H = 260;
+  const m = { t: 10, r: 8, b: 26, l: 36 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const max = Math.max(1, ...dias.map(function (d) { return d.enviados + d.erros; }));
+  const topo = Math.ceil(max / 4 / 10) * 10 * 4 || 4;
+  const y = function (v) { return m.t + ih - (v / topo) * ih; };
+  const passo = iw / dias.length;
+  const bw = Math.min(28, passo * 0.62);
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Envios por dia: enviados e anúncios fora do ar">';
+  s += '<g class="axis">';
+  for (let i = 0; i <= 4; i++) {
+    const v = (topo / 4) * i, yy = y(v);
+    s += '<line x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--grid)" stroke-width="1"/>';
+    s += '<text x="' + (m.l - 6) + '" y="' + (yy + 4) + '" text-anchor="end">' + fmt(v) + '</text>';
+  }
+  const cada = dias.length > 10 ? 2 : 1;
+  dias.forEach(function (d, i) {
+    if (i % cada === (dias.length - 1) % cada) {
+      s += '<text x="' + (m.l + passo * i + passo / 2) + '" y="' + (H - 8) + '" text-anchor="middle">' + dm(d.data) + '</text>';
+    }
+  });
+  s += '</g>';
+  dias.forEach(function (d, i) {
+    const x = m.l + passo * i + (passo - bw) / 2;
+    const hE = ih * (d.enviados / topo), hX = ih * (d.erros / topo);
+    const yE = m.t + ih - hE;
+    if (d.enviados > 0) {
+      const r = d.erros > 0 ? 0 : 4;
+      s += barra(x, yE, bw, hE, 'var(--s1)', d.erros > 0 ? 0 : 4);
+    }
+    if (d.erros > 0) {
+      const gap = d.enviados > 0 ? 2 : 0;
+      s += barra(x, yE - hX - gap, bw, hX, 'var(--s2)', 4);
+    }
+    s += '<rect class="hit" data-i="' + i + '" x="' + (m.l + passo * i) + '" y="' + m.t + '" width="' + passo + '" height="' + ih + '" fill="transparent"/>';
+  });
+  s += '</svg>';
+  box.querySelectorAll('svg').forEach(function (e) { e.remove(); });
+  box.insertAdjacentHTML('afterbegin', s);
+
+  box.querySelectorAll('.hit').forEach(function (el) {
+    el.addEventListener('mousemove', function (ev) { mostrar(ev, dias[+el.dataset.i]); });
+    el.addEventListener('click', function (ev) { mostrar(ev, dias[+el.dataset.i]); });
+    el.addEventListener('mouseleave', function () { tip.style.display = 'none'; });
+  });
+  function mostrar(ev, d) {
+    tip.innerHTML = '<b>' + dm(d.data) + '</b>' +
+      '<div class="r"><span><i style="background:var(--s1)"></i>Enviados</span><span>' + fmt(d.enviados) + '</span></div>' +
+      '<div class="r"><span><i style="background:var(--s2)"></i>Fora do ar</span><span>' + fmt(d.erros) + '</span></div>' +
+      '<div class="r"><span>Leads</span><span>' + fmt(d.leads) + '</span></div>' +
+      '<div class="r"><span>Matches</span><span>' + fmt(d.matches) + '</span></div>';
+    tip.style.display = 'block';
+    const b = box.getBoundingClientRect();
+    let left = ev.clientX - b.left + 12;
+    if (left + tip.offsetWidth > b.width) left = ev.clientX - b.left - tip.offsetWidth - 12;
+    tip.style.left = Math.max(0, left) + 'px';
+    tip.style.top = Math.max(0, ev.clientY - b.top - 20) + 'px';
+  }
+}
+
+// barra com cantos de 4px só na ponta de cima
+function barra(x, y, w, h, cor, raio) {
+  if (h <= 0) return '';
+  const r = Math.min(raio, h, w / 2);
+  if (!r) return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="' + cor + '"/>';
+  return '<path d="M' + x + ',' + (y + h) + 'V' + (y + r) + 'Q' + x + ',' + y + ' ' + (x + r) + ',' + y +
+    'H' + (x + w - r) + 'Q' + (x + w) + ',' + y + ' ' + (x + w) + ',' + (y + r) + 'V' + (y + h) + 'Z" fill="' + cor + '"/>';
+}
+
+(async function iniciar() {
+  let dados;
+  try { dados = await carregar(); } catch (e) { dados = { ok: false, erro: String(e) }; }
+  const aviso = $('aviso');
+  if (!dados.ok) {
+    aviso.style.display = 'block';
+    aviso.textContent = dados.vazio
+      ? 'Painel publicado, aguardando a ligação com os dados do Elo Auto. Para ver como vai ficar, abra com ?demo=1 no final do endereço.'
+      : 'Não foi possível carregar os dados agora. Tente de novo em instantes.';
+    $('atualizado').textContent = 'Sem dados';
+    tiles({ leads: 0, matches: 0, lojas_distintas: 0, enviados: 0, erros: 0, pendentes: 0 });
+    return;
+  }
+  if (dados.exemplo) {
+    aviso.style.display = 'block';
+    aviso.textContent = 'DADOS DE EXEMPLO — esta visualização é só para mostrar o layout. Não são números reais.';
+  }
+  const quando = new Date(dados.atualizado_em);
+  $('atualizado').textContent = 'Atualizado em ' + quando.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  tiles(dados.hoje);
+  tabela(dados.dias);
+  grafico(dados.dias);
+  let t;
+  window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(function () { grafico(dados.dias); }, 120); });
+})();
+</script>
+</body>
+</html>
